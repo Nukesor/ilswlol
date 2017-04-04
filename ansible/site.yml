@@ -8,13 +8,31 @@
   vars:
     site_path: /srv/ilswlol
   tasks:
+  - name: Install needed packages
+    pacman: state=latest name={{ item }}
+    with_items:
+        - git
+        - libconfig
+
   - name: pull git repo
-    register: gitstatus
     git: accept_hostkey=yes
          force=yes
          recursive=yes
          repo=git://github.com/svenstaro/ilswlol.git
          dest={{ site_path }}
+    register: git_status
+
+  - name: Install ilswlol venv and tg
+    shell: |
+      cd {{ ilswlol_path }}
+      make
+    when: git_status.after
+
+  - name: Get pub key
+    shell: |
+      cd {{ ilswlol_path }}
+      TELEGRAM_HOME=/var/lib/ilswlol externals/tg/bin/telegram-cli -k externals/tg/tg-server.pub
+    when: git_status.before == None
 
   - name: create telegram home directory
     file: owner=http group=root mode=750 state=directory path=/var/lib/ilswlol
@@ -32,9 +50,6 @@
 
   - name: reload nginx
     service: name=nginx state=reloaded enabled=yes
-
-  - name: touch uwsgi vassal
-    file: state=touch path=/etc/uwsgi/vassals/ilswlol.ini
 
   handlers:
     - name: restart nginx
